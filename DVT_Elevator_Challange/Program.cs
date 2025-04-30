@@ -7,15 +7,15 @@ using System.Text;
 Console.OutputEncoding = Encoding.UTF8;
 
 #region Simulation paramaters
+
 CancellationTokenSource cancelSrc = new CancellationTokenSource();
 const int updateIntervalInMilliseconds = 1000;
 
 #endregion
 
-
 #region Core Setup
 
-List<PassangerElevator> elevators = Enumerable.Range(0, 2).Select(_ => new PassangerElevator()).ToList();
+List<PassangerElevator> elevators = Enumerable.Range(0, 10).Select(_ => new PassangerElevator()).ToList();
 List<BuildingFloor> floors = new List<BuildingFloor>
 {
     new BuildingFloor { Name = "Lower 2", FloorNo = -2 },
@@ -66,7 +66,7 @@ async Task ListenForUserInputAsync()
                     ? ElevatorTravelDirection.Up
                     : ElevatorTravelDirection.Down;
 
-                building.RequestElevator(requestFloor, destinationFloor, direction, numberOfPeople, ElevatorType.Passanger);
+                building.RequestElevator(requestFloor, destinationFloor, direction, numberOfPeople, ElevatorType.Passanger, true);
 
                 Console.WriteLine("✅ Request submitted!");
             }
@@ -76,7 +76,7 @@ async Task ListenForUserInputAsync()
             }
         }
 
-        await Task.Delay(500); // Avoid hammering the CPU
+        await Task.Delay(500);
     }
 }
 void DisplayPassangerElevatorsPostitions()
@@ -86,28 +86,36 @@ void DisplayPassangerElevatorsPostitions()
         int originalCursorLeft = Console.CursorLeft;
         int originalCursorTop = Console.CursorTop;
 
-        // Save user typing area (bottom)
+        Console.SetCursorPosition(0, 0);
+        Console.WriteLine(new string(' ', Console.WindowWidth));
+        Console.SetCursorPosition(0, 0);
 
-        Console.SetCursorPosition(0, 0); // Move to top
-        Console.WriteLine(new string(' ', Console.WindowWidth)); // Clear line
-        Console.SetCursorPosition(0, 0); // Move back top
-
-        StringBuilder statusBuilder = new StringBuilder();
+        Console.Write("Elevator Status: ");
 
         foreach (PassangerElevator elevator in building.Elevators)
         {
             string directionSymbol = GetDirectionSymbol(elevator.Direction);
-            statusBuilder.Append($"[ {elevator.CurrentFloor} {directionSymbol} ] ");
+
+            if (elevator.HighlightElevator)
+            {
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.Write($"[ *{elevator.CurrentFloor} {directionSymbol}* ] ");
+                Console.ResetColor();
+            }
+            else
+            {
+                Console.Write($"[ {elevator.CurrentFloor} {directionSymbol} ] ");
+            }
         }
 
-        Console.WriteLine($"Elevator Status: {statusBuilder.ToString().Trim()}");
-
-        // Restore cursor to original typing place
+        // Padding
+        Console.WriteLine();
         Console.SetCursorPosition(originalCursorLeft, originalCursorTop);
 
         Thread.Sleep(updateIntervalInMilliseconds);
     }
 }
+
 void CreateRandomPassangerElevatorRequestInBackground()
 {
     Random random = new Random();

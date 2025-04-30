@@ -8,13 +8,22 @@ namespace DVT_Elevator_Challange.Models
 {
     public abstract class BasicElevator
     {
+        public bool HighlightElevator { get; protected set; }
         public int CurrentFloor { get; protected set; }
         public ElevatorTravelDirection Direction { get; protected set; }
+        public ElevatorStatus Status { get; protected set; } = ElevatorStatus.Idle;
 
     }
 
     public abstract class BasicElevatorStop
     {
+        protected BasicElevatorStop()
+        {
+            
+        }
+
+        public string Id { get; init; }
+        public bool HighlightRequest { get; set; }
         public int RequestFloorNo { get; init; }
         public int DestinationFloorNo { get; init; }
     }
@@ -31,4 +40,13 @@ namespace DVT_Elevator_Challange.Models
         Up,
         Down
     }
+
+    public enum ElevatorStatus
+    {
+        Idle,
+        Moving,
+        LoadingPassengers,
+        UnloadingPassengers
+    }
+
 }
