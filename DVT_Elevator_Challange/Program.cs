@@ -3,19 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+Console.OutputEncoding = Encoding.UTF8; //Do not remove
 
-Console.OutputEncoding = Encoding.UTF8;
+#region Setup
 
-#region Simulation paramaters
-
-CancellationTokenSource cancelSrc = new CancellationTokenSource();
-const int updateIntervalInMilliseconds = 1000;
-
-#endregion
-
-#region Core Setup
-
-List<PassangerElevator> elevators = Enumerable.Range(0, 10).Select(_ => new PassangerElevator()).ToList();
+ElevatorInputSession inputSession = new ElevatorInputSession();
+List<PassangerElevator> elevators = Enumerable.Range(0, 3).Select(_ => new PassangerElevator()).ToList();
 List<BuildingFloor> floors = new List<BuildingFloor>
 {
     new BuildingFloor { Name = "Lower 2", FloorNo = -2 },
@@ -29,60 +22,113 @@ List<BuildingFloor> floors = new List<BuildingFloor>
 };
 
 Building building = new Building(elevators, floors);
+building.StartElevators();
+
 Timer requestTimer = new Timer(_ =>
 {
     CreateRandomPassangerElevatorRequestInBackground();
-}, null, TimeSpan.Zero, TimeSpan.FromSeconds(2.5));
+}, null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
 
-// Set up tasks
-Task userInputTask = Task.Run(ListenForUserInputAsync);
+#endregion
+
+#region Main 
+
 Task displayTask = Task.Run(DisplayPassangerElevatorsPostitions);
+Task userInputTask = Task.Run(ListenForUserInputAsync);
 
-// Wait for both to run together
-await Task.WhenAll(userInputTask, displayTask);
+while (true)
+{
+    building.AssignPendingPickUps();
+    await Task.Delay(5000);
+}
+
+#endregion
+
+#region Simulation Helpers
 
 async Task ListenForUserInputAsync()
 {
-    while (!cancelSrc.Token.IsCancellationRequested)
+    while (true)
     {
-        Console.WriteLine();
-        Console.WriteLine("Manual Request: Enter 'R' to request an elevator, or Enter to continue...");
-        string? input = Console.ReadLine();
-
-        if (string.Equals(input, "R", StringComparison.OrdinalIgnoreCase))
+        if (!inputSession.IsRequestInProgress)
         {
-            try
+            var key = Console.ReadKey(true);
+            if (key.Key == ConsoleKey.E)
             {
-                Console.WriteLine("Enter your current floor:");
-                int requestFloor = int.Parse(Console.ReadLine() ?? "0");
-
-                Console.WriteLine("Enter your destination floor:");
-                int destinationFloor = int.Parse(Console.ReadLine() ?? "0");
-
-                Console.WriteLine("How many people?");
-                int numberOfPeople = int.Parse(Console.ReadLine() ?? "1");
-
-                ElevatorTravelDirection direction = destinationFloor > requestFloor
-                    ? ElevatorTravelDirection.Up
-                    : ElevatorTravelDirection.Down;
-
-                building.RequestElevator(requestFloor, destinationFloor, direction, numberOfPeople, ElevatorType.Passanger, true);
-
-                Console.WriteLine("✅ Request submitted!");
+                inputSession.IsRequestInProgress = true;
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error: {ex.Message}");
-            }
+
+            await Task.Delay(100);
+            continue;
         }
 
-        await Task.Delay(500);
+        // If input session is in progress
+        if (inputSession.IsCancelled)
+        {
+            inputSession.Reset();
+            continue;
+        }
+
+        try
+        {
+            if (!inputSession.CurrentFloor.HasValue)
+            {
+                //Console.Write("Enter your current floor (Q to cancel): ");
+                string? input = Console.ReadLine();
+                if (input?.ToUpper() == "Q") inputSession.IsCancelled = true;
+                else inputSession.CurrentFloor = int.Parse(input ?? "0");
+            }
+            else if (!inputSession.DestinationFloor.HasValue)
+            {
+                //Console.Write("Enter destination floor (Q to cancel): ");
+                string? input = Console.ReadLine();
+                if (input?.ToUpper() == "Q") inputSession.IsCancelled = true;
+                else inputSession.DestinationFloor = int.Parse(input ?? "0");
+            }
+            else if (!inputSession.NumberOfPeople.HasValue)
+            {
+                //Console.Write("Enter number of people (Q to cancel): ");
+                string? input = Console.ReadLine();
+                if (input?.ToUpper() == "Q") inputSession.IsCancelled = true;
+                else inputSession.NumberOfPeople = int.Parse(input ?? "1");
+
+                // All inputs gathered
+                if (inputSession.IsComplete)
+                {
+                    var dir = inputSession.DestinationFloor > inputSession.CurrentFloor
+                        ? ElevatorTravelDirection.Up
+                        : ElevatorTravelDirection.Down;
+
+                    building.RequestElevator(
+                        inputSession.CurrentFloor.Value,
+                        inputSession.DestinationFloor.Value,
+                        dir,
+                        inputSession.NumberOfPeople.Value,
+                        ElevatorType.Passanger,
+                        true
+                    );
+
+                    inputSession.Reset();
+                }
+            }
+        }
+        catch(Exception exception)
+        {
+            inputSession.IsCancelled = true;
+            inputSession.IsRequestInProgress = false;
+        }
+
+        await Task.Delay(100);
     }
 }
 void DisplayPassangerElevatorsPostitions()
 {
-    while (!cancelSrc.Token.IsCancellationRequested)
+
+    while (true)
     {
+        Console.Clear();
+
+        int elevatorIndex = 1;
         int originalCursorLeft = Console.CursorLeft;
         int originalCursorTop = Console.CursorTop;
 
@@ -90,32 +136,53 @@ void DisplayPassangerElevatorsPostitions()
         Console.WriteLine(new string(' ', Console.WindowWidth));
         Console.SetCursorPosition(0, 0);
 
-        Console.Write("Elevator Status: ");
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("════════════ Elevators ════════════");
+        Console.ResetColor();
 
         foreach (PassangerElevator elevator in building.Elevators)
         {
             string directionSymbol = GetDirectionSymbol(elevator.Direction);
+            string status = elevator.Status.ToString();
 
             if (elevator.HighlightElevator)
             {
-                Console.ForegroundColor = ConsoleColor.Yellow;
-                Console.Write($"[ *{elevator.CurrentFloor} {directionSymbol}* ] ");
+                Console.ForegroundColor = ConsoleColor.Cyan;
+                Console.WriteLine($"Elevator {elevatorIndex,2}:  Floor {elevator.CurrentFloor,-2} | People {elevator.PeopleInside,-2} | {directionSymbol} | {status}");
                 Console.ResetColor();
             }
             else
             {
-                Console.Write($"[ {elevator.CurrentFloor} {directionSymbol} ] ");
+                Console.WriteLine($"Elevator {elevatorIndex,2}:  Floor {elevator.CurrentFloor,-2} | People {elevator.PeopleInside,-2} | {directionSymbol} | {status}");
             }
+            elevatorIndex++;
+
+        }
+
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Green;
+
+        if (inputSession.IsRequestInProgress)
+        {
+            Console.WriteLine("🚦 Manual Request In Progress...");
+            Console.WriteLine($"   Current Floor     : {inputSession.CurrentFloor?.ToString() ?? "?"}");
+            Console.WriteLine($"   Destination Floor : {inputSession.DestinationFloor?.ToString() ?? "?"}");
+            Console.WriteLine($"   Number of People  : {inputSession.NumberOfPeople?.ToString() ?? "?"}");
+            Console.WriteLine($"   [Type 'Q' at any prompt to cancel]");
+        }
+        else
+        {
+            Console.WriteLine("💡 Press [E] to request elevator...");
         }
 
         // Padding
         Console.WriteLine();
         Console.SetCursorPosition(originalCursorLeft, originalCursorTop);
 
-        Thread.Sleep(updateIntervalInMilliseconds);
+        Console.ResetColor();
+        Thread.Sleep(TimeSpan.FromSeconds(1));
     }
 }
-
 void CreateRandomPassangerElevatorRequestInBackground()
 {
     Random random = new Random();
@@ -144,19 +211,15 @@ void CreateRandomPassangerElevatorRequestInBackground()
 
     building.RequestElevator(requestFloor, destinationFloor, direction, noPeople, ElevatorType.Passanger);
 }
-
-
-
 string GetDirectionSymbol(ElevatorTravelDirection direction)
 {
     return direction switch
     {
         ElevatorTravelDirection.Up => "↑",
         ElevatorTravelDirection.Down => "↓",
-        ElevatorTravelDirection.Idle => "",
+        ElevatorTravelDirection.Idle => " ",
         _ => "?"
     };
 }
 
 #endregion
-

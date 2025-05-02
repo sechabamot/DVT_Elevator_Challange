@@ -2,6 +2,7 @@
 using DVT_Elevator_Challange_Tests.Models;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -15,7 +16,7 @@ namespace DVT_Elevator_Challange_Tests
         public void AddRequest_ShouldRejectRequest_WhenOverCapacity()
         {
             TestablePassangerElevator elevator = new TestablePassangerElevator(0, ElevatorTravelDirection.Idle, peopleInside: 10);
-            elevator.AddRequest(new PassangerElevator.PassangerElevatorPickUpRequest
+            elevator.AssignPickup(new PassangerElevatorPickUpRequest
             {
                 RequestFloorNo = 0,
                 DestinationFloorNo = 5,
@@ -44,41 +45,105 @@ namespace DVT_Elevator_Challange_Tests
         }
 
         [Fact]
-        public void Move_ShouldProcessRequest_AndReachCorrectFloor()
+        public async Task Elevator_ShouldIdle_WhenNoPickupOrDropsOffs()
         {
-            var elevator = new TestablePassangerElevator(0, ElevatorTravelDirection.Idle, peopleInside: 0);
+            //Arrange
+            PassangerElevator elevator = new PassangerElevator();
 
-            elevator.AddRequest(new PassangerElevatorPickUpRequest
-            {
-                RequestFloorNo = 1,
-                DestinationFloorNo = 4,
-                NoPeopleRequestingElevator = 2
-            });
+            //Act
+            _ = Task.Run(() => elevator.RunAsync(TestableOnPickupComplete));
 
-            elevator.Move();
+            //Assert
+            bool isIdle = await WaitForConditionAsync(
+                () => elevator.Status == ElevatorStatus.Idle && elevator.Direction == ElevatorTravelDirection.Idle,
+                10
+            );
 
-            Assert.Equal(4, elevator.CurrentFloor);
-            Assert.Equal(ElevatorTravelDirection.Idle, elevator.Direction);
-            Assert.False(elevator.HasRequests());
-            Assert.Single(elevator.HandledRequests);
+            Assert.Empty(elevator.PendingPickups);
+            Assert.Empty(elevator.ActiveDropOffs);
+            Assert.True(isIdle, "Elevator did not remain idle when no requests exist.");
         }
 
         [Fact]
-        public void Move_ShouldIncreaseAndDecreasePeopleInside()
+        public async void RunAsync_ShouldLoadAndUnloadPassengersCorrectly()
         {
+            //Arrange
             PassangerElevator elevator = new PassangerElevator(0, ElevatorTravelDirection.Idle, peopleInside: 0);
 
-            elevator.AddRequest(new PassangerElevatorPickUpRequest
+            //Act
+            _ = Task.Run(() => elevator.RunAsync(TestableOnPickupComplete));
+            elevator.AssignPickup(new PassangerElevatorPickUpRequest
             {
                 RequestFloorNo = 1,
                 DestinationFloorNo = 5,
                 NoPeopleRequestingElevator = 3
             });
-            elevator.Move();
 
-            Assert.Equal(0, elevator.PeopleInside); // Picked up and dropped off
+            //Assert
+            bool increased = await WaitForConditionAsync(
+               condition: () => elevator.PeopleInside == 3 ,
+               timeoutSeconds: 30,
+               pollIntervalMs: 250
+           );
+            Assert.True(increased, "Number of people in the elevator did not increase.");
+
+            bool decreased = await WaitForConditionAsync(
+             condition: () => elevator.PeopleInside < 3,
+             timeoutSeconds: 30,
+             pollIntervalMs: 250
+            );
+            Assert.True(decreased, "Number of people in the elevator did not decreased.");
         }
 
+        [Fact]
+        public async void RunAsync_ShouldProcessRequest_AndReachCorrectFloor()
+        {
+            // Arrange
+            TestablePassangerElevator elevator = new TestablePassangerElevator(0, ElevatorTravelDirection.Idle, peopleInside: 0);
+            PassangerElevatorPickUpRequest pickUpRequest = new PassangerElevatorPickUpRequest
+            {
+                RequestFloorNo = 1,
+                DestinationFloorNo = 4,
+                NoPeopleRequestingElevator = 2
+            };
+
+            //Act            
+            _ = Task.Run(() => elevator.RunAsync(TestableOnPickupComplete));
+            elevator.AssignPickup(pickUpRequest);
+            
+            bool reached = await WaitForConditionAsync(
+                condition: () => elevator.CurrentFloor == 4 && elevator.Status == ElevatorStatus.Idle,
+                timeoutSeconds: 30,
+                pollIntervalMs: 250
+            );
+
+            // Assert
+            Assert.True(reached, "Elevator did not reach expected floor in time.");
+            Assert.Equal(4, elevator.CurrentFloor);
+            Assert.Equal(ElevatorTravelDirection.Idle, elevator.Direction);
+            Assert.Empty(elevator.PendingPickups);
+        }
+
+        private void TestableOnPickupComplete(PassangerElevatorPickUpRequest request)
+        {
+          
+        }
+
+        private async Task<bool> WaitForConditionAsync(Func<bool> condition, int timeoutSeconds = 10, int pollIntervalMs = 100)
+        {
+            TimeSpan timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            Stopwatch stopwatch = Stopwatch.StartNew();
+
+            while (stopwatch.Elapsed < timeout)
+            {
+                if (condition())
+                    return true;
+
+                await Task.Delay(pollIntervalMs);
+            }
+
+            return false;
+        }
 
     }
 }

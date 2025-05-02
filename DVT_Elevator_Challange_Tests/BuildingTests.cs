@@ -80,10 +80,14 @@ namespace DVT_Elevator_Challange_Tests
 
             // Act
             building.RequestElevator(0, 5, ElevatorTravelDirection.Up, 2);
+            building.AssignPendingPickUps();
 
             // Assert
-            Assert.True(elevator.HandledRequests.Count > 0);
+            Assert.True(elevator.PendingPickups.Count > 0);
         }
+
+     
+
 
         private List<BuildingFloor> GetSampleFloors()
         {

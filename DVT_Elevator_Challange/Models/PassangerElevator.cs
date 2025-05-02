@@ -3,29 +3,51 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static System.Formats.Asn1.AsnWriter;
 
 namespace DVT_Elevator_Challange.Models
 {
     public class PassangerElevator : BasicElevator
     {
+        public Queue<PassangerElevatorPickUpRequest> PendingPickups { get; protected set; } = new();
+        public List<PassangerElevatorDropOffRequest> ActiveDropOffs { get; protected set; } = new();
+
         protected readonly List<PassangerElevatorPickUpRequest> requests = new();
         protected readonly List<PassangerElevatorPickUpRequest> handledRequests = new();
 
         public static int Capacity { get; } = 10;
         public int PeopleInside { get; protected set; }
 
-        // Special constructor for Testing only
-        public PassangerElevator(
-            int currentFloor = 0, 
-            ElevatorTravelDirection direction = ElevatorTravelDirection.Idle, 
-            int peopleInside = 0
-            )
+        public PassangerElevator(int currentFloor = 0, ElevatorTravelDirection direction = ElevatorTravelDirection.Idle, int peopleInside = 0)
         {
             CurrentFloor = currentFloor;
             Direction = direction;
             PeopleInside = peopleInside;
             Status = ElevatorStatus.Idle;
+        }
+
+        public void AssignPickup(PassangerElevatorPickUpRequest request)
+        {
+            if (PeopleInside + request.NoPeopleRequestingElevator > Capacity)
+            {
+                return;
+            }
+
+            PendingPickups.Enqueue(request);
+
+            //PassangerElevatorPickUpRequest? pickUpRequest 
+            //    = PendingPickups.FirstOrDefault(r => r.RequestFloorNo == request.RequestFloorNo);
+
+            //if (pickUpRequest != null)
+            //{
+            //    //What if there is already a pending pickup to that specific floor?
+                
+            //    pickUpRequest.NoPeopleRequestingElevator += request.NoPeopleRequestingElevator;
+            //}
+            //else
+            //{
+            //    PendingPickups.Add(request);
+            //}
+
         }
 
         public bool CanPickup(int requestedFloor, ElevatorTravelDirection desiredDirection, int noPeople)
@@ -40,141 +62,94 @@ namespace DVT_Elevator_Challange.Models
             return goingSameWay && Direction == desiredDirection;
         }
 
-        public void AddRequest(PassangerElevatorPickUpRequest request)
+        public async Task RunAsync(Action<PassangerElevatorPickUpRequest> onPickupComplete)
         {
-            if (PeopleInside + request.NoPeopleRequestingElevator > Capacity)
+            while (true)
             {
-                return;
+                //Elevator should remain idle if no pickups or dropp-off
+                if (!PendingPickups.Any() && !ActiveDropOffs.Any())
+                {
+                    HighlightElevator = false;
+
+                    Direction = ElevatorTravelDirection.Idle;
+                    Status = ElevatorStatus.Idle;
+
+                    await Task.Delay(500); // Let system breathe
+                    continue;
+                }
+
+
+                #region Handle Pickups
+
+                if (PendingPickups.Any())
+                {
+                    var nextPickup = PendingPickups.Dequeue();
+
+                    Direction = nextPickup.RequestFloorNo > CurrentFloor
+                        ? ElevatorTravelDirection.Up
+                        : ElevatorTravelDirection.Down;
+
+                    Status = ElevatorStatus.Moving;
+
+                    while (CurrentFloor != nextPickup.RequestFloorNo)
+                    {
+                        HighlightElevator = nextPickup.HighlightElevator;
+
+                        await Task.Delay(2000);
+                        CurrentFloor += Direction == ElevatorTravelDirection.Up ? 1 : -1;
+                    }
+
+                    Status = ElevatorStatus.LoadingPassengers;
+                    await Task.Delay(1000);
+
+                    PeopleInside += nextPickup.NoPeopleRequestingElevator;
+
+                    ActiveDropOffs.Add(new PassangerElevatorDropOffRequest
+                    {
+                        Id = nextPickup.Id,
+                        DestinationFloorNo = nextPickup.DestinationFloorNo,
+                        NoPeopleGettingOff = nextPickup.NoPeopleRequestingElevator,
+                        HighlightElevator = nextPickup.HighlightElevator
+                    });
+
+                    onPickupComplete(nextPickup);
+                }
+
+                #endregion
+
+                #region Handle Dropoff
+
+                if (ActiveDropOffs.Any())
+                {
+                    PassangerElevatorDropOffRequest nextDrop = ActiveDropOffs
+                        .OrderBy(r => Math.Abs(CurrentFloor - r.DestinationFloorNo))
+                        .First();
+
+                    Direction = nextDrop.DestinationFloorNo > CurrentFloor
+                        ? ElevatorTravelDirection.Up
+                        : ElevatorTravelDirection.Down;
+
+                    Status = ElevatorStatus.Moving;
+
+                    while (CurrentFloor != nextDrop.DestinationFloorNo)
+                    {
+                        HighlightElevator = nextDrop.HighlightElevator;
+
+                        await Task.Delay(3000); // Simulate movement
+                        CurrentFloor += Direction == ElevatorTravelDirection.Up ? 1 : -1;
+                    }
+
+                    // Simulate people getting off the elevator.
+                    Status = ElevatorStatus.UnloadingPassengers;
+                    await Task.Delay(5000);
+
+                    PeopleInside -= nextDrop.NoPeopleGettingOff;
+
+                    ActiveDropOffs.Remove(nextDrop);
+                }
+
+                #endregion
             }
-
-
-            requests.Add(request);
-            PeopleInside += request.NoPeopleRequestingElevator;
-        }
-
-        public void Start()
-        {
-            CancellationToken cancellationToken = CancellationToken.None;
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                PassangerElevatorPickUpRequest stop = GetNextBestRequest();
-                //List<PassangerElevatorRequest> duplicateStops = requests
-                //    .Where(r => 
-                //    r.DestinationFloorNo == stop.DestinationFloorNo 
-                //    &&
-                //    r.Id != stop.Id)
-                //    .ToList();
-
-                requests.Remove(stop);
-                handledRequests.Add(stop);
-
-                // Step 1: Move to the passenger pickup floor
-                Status = ElevatorStatus.Moving;
-                Direction = stop.RequestFloorNo > CurrentFloor ? ElevatorTravelDirection.Up : ElevatorTravelDirection.Down;
-
-                //Move elevator up so long as it is not at the destination floor.
-                while (CurrentFloor != stop.RequestFloorNo)
-                {
-                    MoveOneFloor();
-                }
-
-                // Step 2: Pick up passengers (This means we are now on the request floor no.
-                Status = ElevatorStatus.LoadingPassengers;
-                Thread.Sleep(2000);
-
-                PeopleInside += stop.NoPeopleRequestingElevator; //People have gotten onto elevator
-
-                // Step 3: Move to destination floor
-                Status = ElevatorStatus.Moving;
-                Direction = stop.DestinationFloorNo > CurrentFloor ? ElevatorTravelDirection.Up : ElevatorTravelDirection.Down;
-
-                while (CurrentFloor != stop.DestinationFloorNo)
-                {
-                    MoveOneFloor();
-                }
-
-                // Step 4: Drop off passengers
-                Status = ElevatorStatus.UnloadingPassengers;
-                Thread.Sleep(2000);
-
-                //What if there are passangers from another request 
-                PeopleInside -= stop.NoPeopleRequestingElevator; //People who requested elevator drop off
-
-                PassangerElevatorPickUpRequest nextStop = GetNextBestRequest();
-
-                Direction = nextStop != null
-                    ? (nextStop.RequestFloorNo > CurrentFloor ? ElevatorTravelDirection.Up : ElevatorTravelDirection.Down)
-                    : ElevatorTravelDirection.Idle;
-
-                Status = nextStop != null
-                    ? ElevatorStatus.Moving
-                    : ElevatorStatus.Idle;
-            }
-
-            Direction = ElevatorTravelDirection.Idle;
-            Status = ElevatorStatus.Idle;
-        }
-
-        public void Move()
-        {
-            while (requests.Count > 0)
-            {
-                PassangerElevatorPickUpRequest stop = GetNextBestRequest();
-                //List<PassangerElevatorRequest> duplicateStops = requests
-                //    .Where(r => 
-                //    r.DestinationFloorNo == stop.DestinationFloorNo 
-                //    &&
-                //    r.Id != stop.Id)
-                //    .ToList();
-
-                requests.Remove(stop);
-                handledRequests.Add(stop);
-
-                // Step 1: Move to the passenger pickup floor
-                Status = ElevatorStatus.Moving;
-                Direction = stop.RequestFloorNo > CurrentFloor ? ElevatorTravelDirection.Up : ElevatorTravelDirection.Down;
-
-                //Move elevator up so long as it is not at the destination floor.
-                while (CurrentFloor != stop.RequestFloorNo)
-                {
-                    MoveOneFloor();
-                }
-
-                // Step 2: Pick up passengers (This means we are now on the request floor no.
-                Status = ElevatorStatus.LoadingPassengers;
-                Thread.Sleep(2000);
-
-                PeopleInside += stop.NoPeopleRequestingElevator; //People have gotten onto elevator
-
-                // Step 3: Move to destination floor
-                Status = ElevatorStatus.Moving;
-                Direction = stop.DestinationFloorNo > CurrentFloor ? ElevatorTravelDirection.Up : ElevatorTravelDirection.Down;
-
-                while (CurrentFloor != stop.DestinationFloorNo)
-                {
-                    MoveOneFloor();
-                }
-
-                // Step 4: Drop off passengers
-                Status = ElevatorStatus.UnloadingPassengers;
-                Thread.Sleep(2000);
-
-                //What if there are passangers from another request 
-                PeopleInside -= stop.NoPeopleRequestingElevator; //People who requested elevator drop off
-
-                PassangerElevatorPickUpRequest nextStop = GetNextBestRequest();
-
-                Direction = nextStop != null
-                    ? (nextStop.RequestFloorNo > CurrentFloor ? ElevatorTravelDirection.Up : ElevatorTravelDirection.Down)
-                    : ElevatorTravelDirection.Idle;
-
-                Status = nextStop != null
-                    ? ElevatorStatus.Moving
-                    : ElevatorStatus.Idle;
-            }
-
-            Direction = ElevatorTravelDirection.Idle;
-            Status = ElevatorStatus.Idle;
         }
 
         protected PassangerElevatorPickUpRequest GetNextBestRequest()
@@ -197,55 +172,30 @@ namespace DVT_Elevator_Challange.Models
                 ?? requests.OrderBy(r => Math.Abs(CurrentFloor - r.RequestFloorNo)).First();
         }
 
+    }
 
-        public bool ShoulHighlightMovement()
-        {
-            return requests.Any(s => s.HighlightRequest);
-        }
+    /// <summary>
+    /// This represents unassigned people waiting on a floor.
+    /// </summary>
+    public class PassangerElevatorPickUpRequest
+    {
+        public string? Id { get; init; }
+        public int RequestFloorNo { get; init; }
+        public int DestinationFloorNo { get; init; }
+        public int NoPeopleRequestingElevator { get; set; }
+        public bool HighlightElevator { get; set; }
 
-        private void MoveOneFloor()
-        {
-            if (Direction == ElevatorTravelDirection.Up)
-            {
-                CurrentFloor++;
-            }
-            else if (Direction == ElevatorTravelDirection.Down)
-            {
-                CurrentFloor--;
-            }
+    }
 
-            Thread.Sleep(2000); // 1 second per floor move
-        }
+    /// <summary>
+    /// This represents people already inside elevators with known destinations
+    /// </summary>
+    public class PassangerElevatorDropOffRequest
+    {
+        public string? Id { get; init; }
+        public int DestinationFloorNo { get; init; }
+        public int NoPeopleGettingOff { get; init; }
+        public bool HighlightElevator { get; set; }
 
-        public bool HasRequests()
-        {
-            return requests.Count > 0;
-        }
-
-        internal void AssignPickup(PassangerElevatorPickUpRequest request)
-        {
-            throw new NotImplementedException();
-        }
-
-        /// <summary>
-        /// This represents unassigned people waiting on a floor.
-        /// </summary>
-        public class PassangerElevatorPickUpRequest
-        {
-            public string Id { get; init; }
-            public int RequestFloorNo { get; init; }
-            public int NoPeopleRequestingElevator { get; init; }
-        }
-
-        /// <summary>
-        /// This represents people already inside elevators with known destinations
-        /// </summary>
-        public class PassangerElevatorDropOffRequest
-        {
-            public string Id { get; init; }
-            public int DestinationFloorNo { get; init; }
-            public int NoPeopleGettingOff{ get; init; }
-
-        }
     }
 }

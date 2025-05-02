@@ -16,7 +16,6 @@ namespace DVT_Elevator_Challange.Models
         public List<PassangerElevatorPickUpRequest> PickUpRequests { get; protected set; } = new List<PassangerElevatorPickUpRequest>();
         public List<PassangerElevatorDropOffRequest> DropOffRequests { get; protected set; } = new List<PassangerElevatorDropOffRequest>();
 
-
         public Building(List<PassangerElevator> elevators, List<BuildingFloor> floors)
         {
             if (floors == null || floors.Count < 3)
@@ -26,6 +25,15 @@ namespace DVT_Elevator_Challange.Models
             Floors = floors;
         }
 
+        /// <summary>
+        /// This is a general method that will handle all elevator requests.
+        /// </summary>
+        /// <param name="currentFloor"></param>
+        /// <param name="destinationFloor"></param>
+        /// <param name="desiredDirection"></param>
+        /// <param name="numberOfPeople"></param>
+        /// <param name="type"></param>
+        /// <param name="highlightRequest"></param>
         public void RequestElevator(int currentFloor, int destinationFloor, ElevatorTravelDirection desiredDirection, int numberOfPeople, ElevatorType type = ElevatorType.Passanger, bool highlightRequest = false)
         {
             switch (type)
@@ -41,7 +49,7 @@ namespace DVT_Elevator_Challange.Models
             }
         }
 
-        private void HandlePassangerElevatorRequest(int requestFloorNo, int destinationFloor, ElevatorTravelDirection desiredDirection, int numberOfPeople, bool highlightRequest = false)
+        private void HandlePassangerElevatorRequest(int requestFloorNo, int destinationFloor, ElevatorTravelDirection desiredDirection, int numberOfPeople, bool highlightElevator = false)
         {
             //Step 1: Let's add the request to memeory unless a similar request already exists
 
@@ -61,33 +69,20 @@ namespace DVT_Elevator_Challange.Models
                     Id = guid.ToString(),
                     RequestFloorNo = requestFloorNo,
                     NoPeopleRequestingElevator = numberOfPeople,
+                    HighlightElevator = highlightElevator,
+                    DestinationFloorNo = destinationFloor
                 });
 
             }
 
-            //PassangerElevator? bestElevator = FindBestElevator(requestFloorNo, desiredDirection, numberOfPeople);
-
-            //if (bestElevator == null)
-            //{
-            //    return;
-            //}
-
-            //bestElevator.AddRequest(new PassangerElevatorPickUpRequest
-            //{
-            //    Id = guid.ToString(),
-            //    RequestFloorNo = requestFloorNo,
-            //    DestinationFloorNo = destinationFloor,
-            //    NoPeopleRequestingElevator = numberOfPeople,
-            //    HighlightRequest = highlightRequest
-            //});
-            //bestElevator.Move();
         }
 
         public void AssignPendingPickUps()
         {
-            List<PassangerElevatorPickUpRequest> assigned = new();
 
-            foreach (var request in PickUpRequests)
+            List<PassangerElevatorPickUpRequest> requests = PickUpRequests.ToList();
+
+            foreach (PassangerElevatorPickUpRequest request in requests)
             {
                 PassangerElevator? bestElevator = FindBestElevator(
                     request.RequestFloorNo,
@@ -97,18 +92,12 @@ namespace DVT_Elevator_Challange.Models
 
                 if (bestElevator != null)
                 {
-                    bestElevator.AssignPickup(request); // We'll build this method in the elevator later
-                    assigned.Add(request); // Mark this request as assigned
+                    bestElevator.AssignPickup(request);
+                    PickUpRequests.Remove(request);
                 }
             }
 
-            // Remove successfully assigned pickups
-            foreach (var r in assigned)
-            {
-                PickUpRequests.Remove(r);
-            }
         }
-
 
         protected PassangerElevator? FindBestElevator(int requestFloor, ElevatorTravelDirection desiredDirection, int numberOfPeople)
         {
@@ -130,6 +119,19 @@ namespace DVT_Elevator_Challange.Models
             return candidateElevators.FirstOrDefault();
         }
 
+        public void StartElevators()
+        {
+            foreach (var elevator in Elevators)
+            {
+                _ = Task.Run(() => elevator.RunAsync(OnPickupComplete));
+            }
+        }
+
+        private void OnPickupComplete(PassangerElevatorPickUpRequest request)
+        {
+
+        }
+
     }
 
     public class BuildingFloor
@@ -138,10 +140,8 @@ namespace DVT_Elevator_Challange.Models
         public int FloorNo { get; init; }
 
         //TODO: Accomidate for what kind of elevator can reach this building floor.
+        //TODO: 
     }
-
-
-
 
 }
 
