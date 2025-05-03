@@ -6,56 +6,64 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using static DVT_Elevator_Challange.Models.PassangerElevator;
+using static DVT_Elevator_Challange.Models.PassengerElevator;
 
 namespace DVT_Elevator_Challange_Tests
 {
     public class PassangerElevatorTests
     {
         [Fact]
-        public void AddRequest_ShouldRejectRequest_WhenOverCapacity()
+        public void AssignPickup_ShouldNotQeuePickup_WhenOverCapacity()
         {
-            TestablePassangerElevator elevator = new TestablePassangerElevator(0, ElevatorTravelDirection.Idle, peopleInside: 10);
-            elevator.AssignPickup(new PassangerElevatorPickUpRequest
+            TestablePassangerElevator elevator = new TestablePassangerElevator(0, Direction.Idle, peopleInside: 10);
+            elevator.AssignPickup(new PassengerPickupRequest
             {
                 RequestFloorNo = 0,
                 DestinationFloorNo = 5,
-                NoPeopleRequestingElevator = 1
+                NoPeople = 1
             });
 
-            Assert.False(elevator.HandledRequests.Count > 0);
+            Assert.False(elevator.PendingPickups.Count > 0);
         }
 
         [Fact]
         public void CanPickup_ShouldReturnFalse_WhenOverCapacity()
         {
-            TestablePassangerElevator elevator = new TestablePassangerElevator(2, ElevatorTravelDirection.Idle, 10);
-            bool result = elevator.CanPickup(3, ElevatorTravelDirection.Up, 1);
+            PassengerElevator elevator = new PassengerElevator(2, Direction.Idle, 10);
 
-            Assert.False(result);
+            PassengerPickupRequest request = new PassengerPickupRequest()
+            {
+                RequestFloorNo = 2,
+                DestinationFloorNo = 5,
+                NoPeople = 1
+            };
+
+            Assert.False(elevator.CanPickup(request));
         }
 
         [Fact]
         public void CanPickup_ShouldReturnTrue_WhenIdleAndUnderCapacity()
         {
-            TestablePassangerElevator elevator = new TestablePassangerElevator(1, ElevatorTravelDirection.Idle, peopleInside: 3);
-            bool result = elevator.CanPickup(2, ElevatorTravelDirection.Up, 1);
+            PassengerElevator elevator = new PassengerElevator(1, Direction.Idle, peopleInside: 3);
+            
+            PassengerPickupRequest request = new PassengerPickupRequest()
+            {
+                RequestFloorNo = 2,
+                DestinationFloorNo = 5,
+                NoPeople = 1
+            };
 
-            Assert.True(result);
+            Assert.True(elevator.CanPickup(request));
         }
 
         [Fact]
         public async Task Elevator_ShouldIdle_WhenNoPickupOrDropsOffs()
         {
-            //Arrange
-            PassangerElevator elevator = new PassangerElevator();
-
-            //Act
+            PassengerElevator elevator = new PassengerElevator();
+            
             _ = Task.Run(() => elevator.RunAsync(TestableOnPickupComplete));
-
-            //Assert
             bool isIdle = await WaitForConditionAsync(
-                () => elevator.Status == ElevatorStatus.Idle && elevator.Direction == ElevatorTravelDirection.Idle,
+                () => elevator.Status == Status.Idle && elevator.Direction == Direction.Idle,
                 10
             );
 
@@ -68,15 +76,15 @@ namespace DVT_Elevator_Challange_Tests
         public async void RunAsync_ShouldLoadAndUnloadPassengersCorrectly()
         {
             //Arrange
-            PassangerElevator elevator = new PassangerElevator(0, ElevatorTravelDirection.Idle, peopleInside: 0);
+            PassengerElevator elevator = new PassengerElevator(0, Direction.Idle, peopleInside: 0);
 
             //Act
             _ = Task.Run(() => elevator.RunAsync(TestableOnPickupComplete));
-            elevator.AssignPickup(new PassangerElevatorPickUpRequest
+            elevator.AssignPickup(new PassengerPickupRequest
             {
                 RequestFloorNo = 1,
                 DestinationFloorNo = 5,
-                NoPeopleRequestingElevator = 3
+                NoPeople = 3
             });
 
             //Assert
@@ -99,12 +107,12 @@ namespace DVT_Elevator_Challange_Tests
         public async void RunAsync_ShouldProcessRequest_AndReachCorrectFloor()
         {
             // Arrange
-            TestablePassangerElevator elevator = new TestablePassangerElevator(0, ElevatorTravelDirection.Idle, peopleInside: 0);
-            PassangerElevatorPickUpRequest pickUpRequest = new PassangerElevatorPickUpRequest
+            TestablePassangerElevator elevator = new TestablePassangerElevator(0, Direction.Idle, peopleInside: 0);
+            PassengerPickupRequest pickUpRequest = new PassengerPickupRequest
             {
                 RequestFloorNo = 1,
                 DestinationFloorNo = 4,
-                NoPeopleRequestingElevator = 2
+                NoPeople = 2
             };
 
             //Act            
@@ -112,7 +120,7 @@ namespace DVT_Elevator_Challange_Tests
             elevator.AssignPickup(pickUpRequest);
             
             bool reached = await WaitForConditionAsync(
-                condition: () => elevator.CurrentFloor == 4 && elevator.Status == ElevatorStatus.Idle,
+                condition: () => elevator.CurrentFloor == 4 && elevator.Status == Status.Idle,
                 timeoutSeconds: 30,
                 pollIntervalMs: 250
             );
@@ -120,11 +128,45 @@ namespace DVT_Elevator_Challange_Tests
             // Assert
             Assert.True(reached, "Elevator did not reach expected floor in time.");
             Assert.Equal(4, elevator.CurrentFloor);
-            Assert.Equal(ElevatorTravelDirection.Idle, elevator.Direction);
+            Assert.Equal(Direction.Idle, elevator.Direction);
             Assert.Empty(elevator.PendingPickups);
         }
 
-        private void TestableOnPickupComplete(PassangerElevatorPickUpRequest request)
+        [Fact]
+        public void GetSuitabilityScore_ShouldReturnDistance_WhenEligible()
+        {
+            PassengerElevator elevator = new PassengerElevator(currentFloor: 3, direction: Direction.Idle, peopleInside: 0);
+            PassengerPickupRequest request = new PassengerPickupRequest
+            {
+                RequestFloorNo = 5,
+                DestinationFloorNo = 7,
+                NoPeople = 2
+            };
+
+            int? score = elevator.GetSuitabilityScore(request);
+
+            Assert.NotNull(score);
+            Assert.Equal(2, score);
+        }
+
+        [Fact]
+        public void GetSuitabilityScore_ShouldReturnNull_WhenOverCapacity()
+        {
+            PassengerElevator elevator = new PassengerElevator(currentFloor: 1, direction: Direction.Idle, peopleInside: PassengerElevator.Capacity);
+            PassengerPickupRequest request = new PassengerPickupRequest
+            {
+                RequestFloorNo = 2,
+                DestinationFloorNo = 4,
+                NoPeople = 1
+            };
+
+            int? score = elevator.GetSuitabilityScore(request);
+
+            Assert.Null(score);
+        }
+
+    
+        private void TestableOnPickupComplete(PickupRequest request)
         {
           
         }

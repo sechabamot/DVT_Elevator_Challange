@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 
 namespace DVT_Elevator_Challange_Tests.Models
 {
-    internal class TestablePassangerElevator : PassangerElevator
+    internal class TestablePassangerElevator : PassengerElevator
     {
-        public IReadOnlyList<PassangerElevatorPickUpRequest> HandledRequests => handledRequests.AsReadOnly();
+        //public IReadOnlyList<PassengerPickupRequest> HandledRequests => handledRequests.AsReadOnly();
 
         public TestablePassangerElevator()
         {
@@ -18,14 +18,14 @@ namespace DVT_Elevator_Challange_Tests.Models
 
         public TestablePassangerElevator(
           int currentFloor = 0,
-          ElevatorTravelDirection direction = ElevatorTravelDirection.Idle,
+          Direction direction = Direction.Idle,
           int peopleInside = 0
           )
         {
             CurrentFloor = currentFloor;
             Direction = direction;
             PeopleInside = peopleInside;
-            Status = ElevatorStatus.Idle;
+            Status = Status.Idle;
         }
 
         public void ForceFullCapacity () 

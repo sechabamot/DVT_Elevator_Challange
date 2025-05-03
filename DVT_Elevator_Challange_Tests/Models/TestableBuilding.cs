@@ -9,14 +9,14 @@ namespace DVT_Elevator_Challange_Tests.Models
 {
     internal class TestableBuilding : Building
     {
-        public TestableBuilding(List<PassangerElevator> elevators, List<BuildingFloor> floors) : base(elevators, floors)
+        public TestableBuilding(List<IElevator> elevators, List<BuildingFloor> floors) : base(elevators, floors)
         {
 
         }
 
-        public PassangerElevator? ExposeFindBestElevator(int requestFloor, ElevatorTravelDirection desiredDirection, int numberOfPeople)
+        public IElevator? ExposeFindBestElevator(PickupRequest request)
         {
-            return FindBestElevator(requestFloor, desiredDirection, numberOfPeople);
+            return FindBestElevator(request);
         }
     }
 }
