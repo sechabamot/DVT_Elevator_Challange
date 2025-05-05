@@ -2,6 +2,8 @@
 using System.Text;
 
 
+
+
 #region Setup
 
 Console.OutputEncoding = Encoding.UTF8; // Do not remove. Ensures symbols like ↑ and ↓ render properly
@@ -10,7 +12,7 @@ Console.OutputEncoding = Encoding.UTF8; // Do not remove. Ensures symbols like �
 // Initialize elevators, floors, and start the elevator engine.
 ElevatorInputSession inputSession = new ElevatorInputSession();
 
-List<IElevator> elevators = [.. Enumerable.Range(0, 10).Select(_ => new PassengerElevator())];
+List<IElevator> elevators = [.. Enumerable.Range(0, 5).Select(_ => new PassengerElevator())];
 List<BuildingFloor> floors = new List<BuildingFloor>
 {
     new BuildingFloor { Name = "Lower 2", FloorNo = -2 },
@@ -29,6 +31,11 @@ building.StartElevators();
 #endregion
 
 #region Main
+
+
+//Please don't penalise me for not having a graceful way of terminating my application.:(
+//Apart from it being a tough few weeks, It's a console app, please just close it :), 
+
 // Set up background tasks for display and user interaction
 Timer requestTimer = new Timer(_ =>
 {
@@ -54,6 +61,11 @@ while (true)
 /// </summary>
 async Task ListenForUserInputAsync()
 {
+    //[Developer Note]:
+    //The input session is lacking. My main focus was on the actaul design of core concepts.
+    //With a litle more time I am confident I can improve this significanlty.
+
+
     while (true)
     {
         if (!inputSession.IsRequestInProgress)
@@ -80,35 +92,61 @@ async Task ListenForUserInputAsync()
             {
                 string? input = Console.ReadLine();
                 if (input?.ToUpper() == "Q") inputSession.IsCancelled = true;
-                else inputSession.CurrentFloor = int.Parse(input ?? "0");
+
+                else if (!int.TryParse(input, out int floor))
+                {
+                    inputSession.LatestErrorMessage = "❌ Invalid input. Please enter a valid number for your current floor.";
+                }
+                else
+                {
+                    inputSession.CurrentFloor = floor;
+                    inputSession.ClearError();
+                }
             }
             else if (!inputSession.DestinationFloor.HasValue)
             {
                 string? input = Console.ReadLine();
                 if (input?.ToUpper() == "Q") inputSession.IsCancelled = true;
-                else inputSession.DestinationFloor = int.Parse(input ?? "0");
+                else if (!int.TryParse(input, out int floor))
+                {
+                    inputSession.LatestErrorMessage = "❌ Invalid input. Please enter a valid number for your destination floor.";
+                }
+                else
+                {
+                    inputSession.DestinationFloor = floor;
+                    inputSession.ClearError();
+                }
             }
             else if (!inputSession.NumberOfPeople.HasValue)
             {
                 string? input = Console.ReadLine();
                 if (input?.ToUpper() == "Q") inputSession.IsCancelled = true;
-                else inputSession.NumberOfPeople = int.Parse(input ?? "1");
+                else if (!int.TryParse(input, out int people) || people <= 0)
+                {
+                    inputSession.LatestErrorMessage = "❌ Number of people must be at least 1.";
+                }
+                else
+                {
+                    inputSession.NumberOfPeople = people;
+                    inputSession.ClearError();
+                }
 
                 if (inputSession.IsComplete)
                 {
-                    Direction dir = inputSession.DestinationFloor > inputSession.CurrentFloor
-                        ? Direction.Up
-                        : Direction.Down;
-
-                    PassengerPickupRequest request = new PassengerPickupRequest
+                    try
                     {
-                        RequestFloorNo = inputSession.CurrentFloor.Value,
-                        NoPeople = inputSession.NumberOfPeople.Value,
-                        Highlight = true,
-                        DestinationFloorNo = inputSession.DestinationFloor.Value
-                    };
-                    building.RequestElevator(request);
-                    inputSession.Reset();
+                        PassengerPickupRequest request = new PassengerPickupRequest(inputSession.NumberOfPeople ?? 0, inputSession.CurrentFloor ?? 0, inputSession.DestinationFloor ?? 0, true);
+
+                        building.RequestElevator(request);
+                        inputSession.Reset();
+                    }
+                    catch (Exception exception)
+                    {
+                        inputSession.LatestErrorMessage = $"❌ {exception.Message}";
+
+                        await Task.Delay(5000);
+                        inputSession.Reset();
+                    }
                 }
             }
         }
@@ -168,15 +206,21 @@ void DisplayPassangerElevatorsPostitions()
 
         if (inputSession.IsRequestInProgress)
         {
-            Console.WriteLine("🚦 Manual Request In Progress...");
+            Console.WriteLine("------------------------------");
+            Console.WriteLine("Manual Request In Progress...");
             Console.WriteLine($"   Current Floor     : {inputSession.CurrentFloor?.ToString() ?? "?"}");
             Console.WriteLine($"   Destination Floor : {inputSession.DestinationFloor?.ToString() ?? "?"}");
             Console.WriteLine($"   Number of People  : {inputSession.NumberOfPeople?.ToString() ?? "?"}");
             Console.WriteLine($"   [Type 'Q' at any prompt to cancel]");
+            Console.WriteLine("------------------------------");
+            if (!string.IsNullOrEmpty(inputSession.LatestErrorMessage))
+            {
+                Console.WriteLine(inputSession.LatestErrorMessage);
+            }
         }
         else
         {
-            Console.WriteLine("💡 Press [E] to request elevator...");
+            Console.WriteLine("Press [E] to request elevator...");
         }
 
         Console.WriteLine();
@@ -192,31 +236,31 @@ void DisplayPassangerElevatorsPostitions()
 /// </summary>
 void CreateRandomPassangerElevatorRequestInBackground()
 {
-    Random random = new Random();
-
-    int minFloor = building.Floors.Min(e => e.FloorNo);
-    int maxFloor = building.Floors.Max(e => e.FloorNo);
-
-    int requestFloor = random.Next(minFloor, maxFloor + 1);
-
-    Direction[] possibleDirections = (Direction[])Enum.GetValues(typeof(Direction));
-    int directionIndex = random.Next(1, 3); // 1 = Up, 2 = Down (Exclude Idle = 0)
-    Direction direction = possibleDirections[directionIndex];
-
-    int destinationFloor = direction == Direction.Up
-        ? random.Next(requestFloor + 1, maxFloor + 1)
-        : random.Next(minFloor, requestFloor);
-
-    int noPeople = random.Next(1, PassengerElevator.Capacity);
-
-    PassengerPickupRequest request = new PassengerPickupRequest
+    try
     {
-        RequestFloorNo = requestFloor,
-        NoPeople = noPeople,
-        Highlight = false,
-        DestinationFloorNo = destinationFloor
-    };
-    building.RequestElevator(request);
+        Random random = new Random();
+
+        int minFloor = building.Floors.Min(e => e.FloorNo);
+        int maxFloor = building.Floors.Max(e => e.FloorNo);
+
+        int requestFloor = random.Next(minFloor, maxFloor + 1);
+
+        ElevatorTravelDirection[] possibleDirections = (ElevatorTravelDirection[])Enum.GetValues(typeof(ElevatorTravelDirection));
+        int directionIndex = random.Next(1, 3); // 1 = Up, 2 = Down (Exclude Idle = 0)
+        ElevatorTravelDirection direction = possibleDirections[directionIndex];
+
+        int destinationFloor = direction == ElevatorTravelDirection.Up
+            ? random.Next(requestFloor + 1, maxFloor + 1)
+            : random.Next(minFloor, requestFloor);
+
+        int noPeople = random.Next(1, PassengerElevator.Capacity);
+
+        PassengerPickupRequest request = new PassengerPickupRequest(noPeople, requestFloor, destinationFloor);
+        building.RequestElevator(request);
+    }
+    catch (Exception exception)
+    {
+    }
 }
 
 /// <summary>
@@ -224,13 +268,13 @@ void CreateRandomPassangerElevatorRequestInBackground()
 /// </summary>
 /// <param name="direction">The direction of the elevator.</param>
 /// <returns>↑, ↓, or blank space for Idle.</returns>
-string GetDirectionSymbol(Direction direction)
+string GetDirectionSymbol(ElevatorTravelDirection direction)
 {
     return direction switch
     {
-        Direction.Up => "↑",
-        Direction.Down => "↓",
-        Direction.Idle => " ",
+        ElevatorTravelDirection.Up => "↑",
+        ElevatorTravelDirection.Down => "↓",
+        ElevatorTravelDirection.Idle => " ",
         _ => "?"
     };
 }

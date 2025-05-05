@@ -40,12 +40,12 @@ namespace DVT_Elevator_Challange.Models
         /// <param name="currentFloor">The floor where the elevator starts. Default is 0.</param>
         /// <param name="direction">The starting direction of travel. Default is Idle.</param>
         /// <param name="peopleInside">Initial number of people inside the elevator. Default is 0.</param>
-        public PassengerElevator(int currentFloor = 0, Direction direction = Direction.Idle, int peopleInside = 0)
+        public PassengerElevator(int currentFloor = 0, ElevatorTravelDirection direction = ElevatorTravelDirection.Idle, int peopleInside = 0)
         {
             CurrentFloor = currentFloor;
             Direction = direction;
             PeopleInside = peopleInside;
-            Status = Status.Idle;
+            Status = ElevatorStatus.Idle;
         }
 
         /// <summary>
@@ -73,13 +73,19 @@ namespace DVT_Elevator_Challange.Models
         public override bool CanPickup(PickupRequest request)
         {
             if (request is not PassengerPickupRequest passenger) return false;
+
+            #region Preven􀆟ng Inconsistent States
+
             if (PeopleInside + passenger.NoPeople > Capacity) return false;
+            if(Status == ElevatorStatus.UnloadingPassengers || Status == ElevatorStatus.LoadingPassengers ) return false;
+
+            #endregion
 
             bool goingSameWay =
-                Direction == Direction.Up && passenger.RequestFloorNo > CurrentFloor ||
-                Direction == Direction.Down && passenger.RequestFloorNo < CurrentFloor;
+                Direction == ElevatorTravelDirection.Up && passenger.RequestFloorNo > CurrentFloor ||
+                Direction == ElevatorTravelDirection.Down && passenger.RequestFloorNo < CurrentFloor;
 
-            return Direction == Direction.Idle || goingSameWay;
+            return Direction == ElevatorTravelDirection.Idle || goingSameWay;
         }
 
         /// <summary>
@@ -94,8 +100,8 @@ namespace DVT_Elevator_Challange.Models
                 if (!PendingPickups.Any() && !ActiveDropOffs.Any())
                 {
                     HighlightElevator = false;
-                    Direction = Direction.Idle;
-                    Status = Status.Idle;
+                    Direction = ElevatorTravelDirection.Idle;
+                    Status = ElevatorStatus.Idle;
                     await Task.Delay(500);
                     continue;
                 }
@@ -107,19 +113,19 @@ namespace DVT_Elevator_Challange.Models
                     PassengerPickupRequest nextPickup = PendingPickups.Dequeue();
 
                     Direction = nextPickup.RequestFloorNo > CurrentFloor
-                        ? Direction.Up
-                        : Direction.Down;
+                        ? ElevatorTravelDirection.Up
+                        : ElevatorTravelDirection.Down;
 
-                    Status = Status.Moving;
+                    Status = ElevatorStatus.Moving;
 
                     while (CurrentFloor != nextPickup.RequestFloorNo)
                     {
                         HighlightElevator = nextPickup.Highlight;
                         await Task.Delay(2000);
-                        CurrentFloor += Direction == Direction.Up ? 1 : -1;
+                        CurrentFloor += Direction == ElevatorTravelDirection.Up ? 1 : -1;
                     }
 
-                    Status = Status.LoadingPassengers;
+                    Status = ElevatorStatus.LoadingPassengers;
                     await Task.Delay(1000);
 
                     PeopleInside += nextPickup.NoPeople;
@@ -145,19 +151,19 @@ namespace DVT_Elevator_Challange.Models
                         .First();
 
                     Direction = nextDrop.DestinationFloorNo > CurrentFloor
-                        ? Direction.Up
-                        : Direction.Down;
+                        ? ElevatorTravelDirection.Up
+                        : ElevatorTravelDirection.Down;
 
-                    Status = Status.Moving;
+                    Status = ElevatorStatus.Moving;
 
                     while (CurrentFloor != nextDrop.DestinationFloorNo)
                     {
                         HighlightElevator = nextDrop.Highlight;
                         await Task.Delay(3000);
-                        CurrentFloor += Direction == Direction.Up ? 1 : -1;
+                        CurrentFloor += Direction == ElevatorTravelDirection.Up ? 1 : -1;
                     }
 
-                    Status = Status.UnloadingPassengers;
+                    Status = ElevatorStatus.UnloadingPassengers;
                     await Task.Delay(5000);
 
                     PeopleInside -= nextDrop.NoPeopleGettingOff;
@@ -193,10 +199,35 @@ namespace DVT_Elevator_Challange.Models
     public class PassengerPickupRequest : PickupRequest
     {
         /// <summary>
-        /// Gets or sets the number of people requesting the elevator at the given floor.
+        /// Gets the number of people requesting the elevator.
         /// </summary>
-        public int NoPeople { get; set; }
+        public int NoPeople { get; }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="PassengerPickupRequest"/> class.
+        /// </summary>
+        /// <param name="noPeople">The number of people requesting the elevator.</param>
+        /// <exception cref="ArgumentOutOfRangeException">Thrown if noPeople is less than 1.</exception>
+        public PassengerPickupRequest(int noPeople, int requestFloorNo, int destinationFloorNo, bool highlight = false)
+        {
+            if (noPeople <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(noPeople), "Number of people must be greater than zero.");
+            }
+
+            if (requestFloorNo == destinationFloorNo)
+            {
+                throw new ArgumentException("Request and destination floors cannot be the same.", nameof(destinationFloorNo));
+            }
+
+            NoPeople = noPeople;
+            RequestFloorNo = requestFloorNo;
+            DestinationFloorNo = destinationFloorNo;
+            Highlight = highlight;
+        }
+
     }
+
 
 
     /// <summary>

@@ -43,8 +43,8 @@ namespace DVT_Elevator_Challange_Tests
         [Fact]
         public void FindBestElevator_ShouldReturnNearestIdleElevator()
         {
-            PassengerElevator elevator1 = new PassengerElevator(2, Direction.Idle);
-            PassengerElevator elevator2 = new PassengerElevator(5, Direction.Idle);
+            PassengerElevator elevator1 = new PassengerElevator(2, ElevatorTravelDirection.Idle);
+            PassengerElevator elevator2 = new PassengerElevator(5, ElevatorTravelDirection.Idle);
             TestableBuilding building = new TestableBuilding(new List<IElevator> { elevator1, elevator2 }, GetSampleFloors());
 
             PassengerPickupRequest request = new PassengerPickupRequest { RequestFloorNo = 3, DestinationFloorNo = 6, NoPeople = 1 };
@@ -56,8 +56,8 @@ namespace DVT_Elevator_Challange_Tests
         [Fact]
         public void FindBestElevator_ShouldPrioritizeElevatorAlreadyMovingTowardsRequest()
         {
-            PassengerElevator movingElevator = new PassengerElevator(2, Direction.Up);
-            PassengerElevator idleElevator = new PassengerElevator(0, Direction.Idle);
+            PassengerElevator movingElevator = new PassengerElevator(2, ElevatorTravelDirection.Up);
+            PassengerElevator idleElevator = new PassengerElevator(0, ElevatorTravelDirection.Idle);
 
             TestableBuilding building = new TestableBuilding(new List<IElevator> { movingElevator, idleElevator }, GetSampleFloors());
 

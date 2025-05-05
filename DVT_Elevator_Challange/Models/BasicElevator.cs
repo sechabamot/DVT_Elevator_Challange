@@ -9,8 +9,8 @@ namespace DVT_Elevator_Challange.Models
     public interface IElevator
     {
         int CurrentFloor { get; }
-        Direction Direction { get; }
-        Status Status { get; }
+        ElevatorTravelDirection Direction { get; }
+        ElevatorStatus Status { get; }
         Task RunAsync(Action<PickupRequest> onPickupComplete);
         bool CanPickup(PickupRequest request);
         void AssignPickup(PickupRequest request);
@@ -21,8 +21,8 @@ namespace DVT_Elevator_Challange.Models
     {
         public bool HighlightElevator { get; protected set; }
         public int CurrentFloor { get; protected set; }
-        public Direction Direction { get; protected set; } = Direction.Idle;
-        public Status Status { get; protected set; } = Status.Idle;
+        public ElevatorTravelDirection Direction { get; protected set; } = ElevatorTravelDirection.Idle;
+        public ElevatorStatus Status { get; protected set; } = ElevatorStatus.Idle;
         public abstract Task RunAsync(Action<PickupRequest> onPickupComplete);
         public abstract bool CanPickup(PickupRequest request);
         public abstract void AssignPickup(PickupRequest request);
@@ -37,7 +37,7 @@ namespace DVT_Elevator_Challange.Models
 
     public abstract class PickupRequest : ElevatorRequest
     {
-        public int RequestFloorNo { get; init; }
+        public int RequestFloorNo { get; init; } 
     }
 
     public abstract class DropOffRequest : ElevatorRequest
@@ -51,14 +51,14 @@ namespace DVT_Elevator_Challange.Models
         Passanger,
     }
 
-    public enum Direction
+    public enum ElevatorTravelDirection
     {
         Idle,
         Up,
         Down
     }
 
-    public enum Status
+    public enum ElevatorStatus
     {
         Idle,
         Moving,

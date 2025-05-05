@@ -18,14 +18,14 @@ namespace DVT_Elevator_Challange_Tests.Models
 
         public TestablePassangerElevator(
           int currentFloor = 0,
-          Direction direction = Direction.Idle,
+          ElevatorTravelDirection direction = ElevatorTravelDirection.Idle,
           int peopleInside = 0
           )
         {
             CurrentFloor = currentFloor;
             Direction = direction;
             PeopleInside = peopleInside;
-            Status = Status.Idle;
+            Status = ElevatorStatus.Idle;
         }
 
         public void ForceFullCapacity () 

@@ -13,6 +13,7 @@ namespace DVT_Elevator_Challange.Models
         public int? CurrentFloor { get; set; }
         public int? DestinationFloor { get; set; }
         public int? NumberOfPeople { get; set; }
+        public string? LatestErrorMessage { get; set; }
 
         public bool IsComplete =>
             CurrentFloor.HasValue &&
@@ -26,7 +27,11 @@ namespace DVT_Elevator_Challange.Models
             CurrentFloor = null;
             DestinationFloor = null;
             NumberOfPeople = null;
+            ClearError();
+
         }
+        public void ClearError() => LatestErrorMessage = null;
+
     }
 
 }

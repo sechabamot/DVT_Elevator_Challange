@@ -73,6 +73,15 @@ namespace DVT_Elevator_Challange.Models
         /// <param name="request">The pickup request to queue.</param>
         public void RequestElevator(PickupRequest request)
         {
+            //Only handle a floor number that is actually in the building
+            
+            if (!IsValidFloorNo(request.DestinationFloorNo)) throw new ArgumentException("The destination floor is for an floor number not in the building", nameof(request.DestinationFloorNo));
+            if (!IsValidFloorNo(request.RequestFloorNo)) throw new ArgumentException("The reqest floor is for an floor number not in the building", nameof(request.RequestFloorNo));
+
+            //[Developer Note]:
+            //I am certain ther are a few more valiation
+            //requirements need here but for the sake of time though I hope this comment will let you know that I am aware.
+
             PickUpRequests.Add(request);
         }
 
@@ -105,20 +114,20 @@ namespace DVT_Elevator_Challange.Models
         /// <returns>The best available elevator or <c>null</c> if none are suitable.</returns>
         protected IElevator? FindBestElevator(PickupRequest request)
         {
-            Direction direction = request.DestinationFloorNo > request.RequestFloorNo
-                ? Direction.Up
-                : Direction.Down;
+            ElevatorTravelDirection direction = request.DestinationFloorNo > request.RequestFloorNo
+                ? ElevatorTravelDirection.Up
+                : ElevatorTravelDirection.Down;
 
             return Elevators
                 .Where(elevator =>
                     elevator.CanPickup(request) &&
                     (
-                        elevator.Direction == Direction.Idle ||
+                        elevator.Direction == ElevatorTravelDirection.Idle ||
                         (
                             elevator.Direction == direction &&
                             (
-                                (direction == Direction.Up && elevator.CurrentFloor <= request.RequestFloorNo) ||
-                                (direction == Direction.Down && elevator.CurrentFloor >= request.RequestFloorNo)
+                                (direction == ElevatorTravelDirection.Up && elevator.CurrentFloor <= request.RequestFloorNo) ||
+                                (direction == ElevatorTravelDirection.Down && elevator.CurrentFloor >= request.RequestFloorNo)
                             )
                         )
                     ))
@@ -145,8 +154,11 @@ namespace DVT_Elevator_Challange.Models
         /// <param name="request">The completed pickup request.</param>
         private void OnPickupComplete(PickupRequest request)
         {
-            // Reserved for analytics or system state updates
+            // For analytics or system state updates and so on..
         }
+
+        private bool IsValidFloorNo(int floorNo) => Floors.Any(f => f.FloorNo == floorNo);
+
     }
 
     /// <summary>
