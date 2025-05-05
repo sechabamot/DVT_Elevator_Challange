@@ -4,7 +4,7 @@ This is a C# console-based elevator simulation designed to mimic how a building 
 
 ## 🚀 Features
 
-- Simulates up to 10 passenger elevators moving independently.
+- Simulates up to X number of elevators moving independently.
 - Supports random and manual elevator requests.
 - Visual representation of elevator positions, directions, and status in real-time.
 - Request highlighting for visibility.
@@ -13,7 +13,7 @@ This is a C# console-based elevator simulation designed to mimic how a building 
 
 ## 🧩 Tech Stack
 
-- .NET 6+
+- .NET 8+
 - Console Application
 - Object-Oriented Design
 - Clean Architecture Principles
